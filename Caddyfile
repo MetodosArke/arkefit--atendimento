@@ -1,0 +1,11 @@
+{
+	email {$LETSENCRYPT_EMAIL}
+}
+
+{$CHATWOOT_DOMAIN} {
+	reverse_proxy chatwoot-rails:3000
+}
+
+{$EVOLUTION_DOMAIN} {
+	reverse_proxy evolution-api:8080
+}

@@ -19,11 +19,9 @@ if [ ! -f .env ]; then
   cp .env.example .env
   sed -i \
     -e "s|^CHATWOOT_DOMAIN=.*|CHATWOOT_DOMAIN=chatwoot.$sufixo|" \
-    -e "s|^EVOLUTION_DOMAIN=.*|EVOLUTION_DOMAIN=evolution.$sufixo|" \
     -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" \
     -e "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$(openssl rand -hex 24)|" \
     -e "s|^CHATWOOT_SECRET_KEY_BASE=.*|CHATWOOT_SECRET_KEY_BASE=$(openssl rand -hex 64)|" \
-    -e "s|^EVOLUTION_API_KEY=.*|EVOLUTION_API_KEY=$(openssl rand -hex 32)|" \
     .env
   chmod 600 .env
 fi

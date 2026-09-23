@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Backup dos dois bancos (Chatwoot e Evolution) e da sessão do WhatsApp.
-# Guarda em /var/backups/arkefit-atendimento e mantém os 7 mais recentes.
-# A sessão importa tanto quanto o banco: sem ela, é preciso escanear o QR Code de novo.
+# Backup do banco do Chatwoot e dos anexos (fotos e documentos que os clientes mandam ficam fora do banco,
+# na pasta storage). Guarda em /var/backups/arkefit-atendimento e mantém os 7 mais recentes de cada.
 #
-# Restaurar um banco:
-#   gunzip -c <arquivo>.sql.gz | docker compose exec -T postgres psql -U "$POSTGRES_USER" -d <chatwoot|evolution>
+# Restaurar o banco:
+#   gunzip -c chatwoot-<data>.sql.gz | docker compose exec -T postgres psql -U "$POSTGRES_USER" -d chatwoot
+# Restaurar os anexos:
+#   docker compose run --rm --no-deps -v /var/backups/arkefit-atendimento:/origem --entrypoint tar \
+#     chatwoot-rails xzf /origem/anexos-<data>.tar.gz -C /app
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -15,16 +17,13 @@ carimbo=$(date +%Y%m%d-%H%M)
 mkdir -p "$destino"
 chmod 700 "$destino"
 
-for banco in chatwoot evolution; do
-  docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d "$banco" --clean --if-exists \
-    | gzip > "$destino/$banco-$carimbo.sql.gz"
-done
+docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -d chatwoot --clean --if-exists \
+  | gzip > "$destino/chatwoot-$carimbo.sql.gz"
 
-docker compose run --rm --no-deps -v "$destino:/destino" --entrypoint tar evolution-api \
-  czf "/destino/whatsapp-sessao-$carimbo.tar.gz" -C /evolution instances
+docker compose run --rm --no-deps -v "$destino:/destino" --entrypoint tar chatwoot-rails \
+  czf "/destino/anexos-$carimbo.tar.gz" -C /app storage
 
-# Mantém os 7 mais recentes de cada tipo.
-for prefixo in chatwoot evolution whatsapp-sessao; do
+for prefixo in chatwoot anexos; do
   ls -1t "$destino/$prefixo-"* 2>/dev/null | tail -n +8 | xargs -r rm -f
 done
 

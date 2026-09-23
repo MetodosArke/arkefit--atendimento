@@ -33,7 +33,6 @@ services:
       POSTGRES_DB: chatwoot
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./postgres-init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
@@ -51,38 +50,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  evolution-api:
-    image: evoapicloud/evolution-api:latest
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      SERVER_URL: https://${EVOLUTION_DOMAIN}
-      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-      DATABASE_ENABLED: "true"
-      DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/evolution
-      DATABASE_CONNECTION_CLIENT_NAME: arkefit_atendimento
-      DATABASE_SAVE_DATA_INSTANCE: "true"
-      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
-      DATABASE_SAVE_MESSAGE_UPDATE: "true"
-      DATABASE_SAVE_DATA_CONTACTS: "true"
-      DATABASE_SAVE_DATA_CHATS: "true"
-      CACHE_REDIS_ENABLED: "true"
-      CACHE_REDIS_URI: redis://:${REDIS_PASSWORD}@redis:6379/1
-      CACHE_REDIS_PREFIX_KEY: evolution
-      CACHE_LOCAL_ENABLED: "false"
-      # Integração nativa: a Evolution cria a caixa no Chatwoot e entrega cada mensagem lá.
-      CHATWOOT_ENABLED: "true"
-      CHATWOOT_MESSAGE_READ: "true"
-      CONFIG_SESSION_PHONE_CLIENT: "ArkeFit Suporte"
-      LANGUAGE: pt-BR
-    volumes:
-      - evolution_store:/evolution/instances
 
   # Roda uma vez a cada subida: cria o banco na primeira vez e aplica migrations nas
   # atualizações. Rails e Sidekiq só sobem depois que ele termina com sucesso.
@@ -125,13 +92,11 @@ services:
     restart: unless-stopped
     depends_on:
       - chatwoot-rails
-      - evolution-api
     ports:
       - "80:80"
       - "443:443"
     environment:
       CHATWOOT_DOMAIN: ${CHATWOOT_DOMAIN}
-      EVOLUTION_DOMAIN: ${EVOLUTION_DOMAIN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
@@ -140,7 +105,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  evolution_store:
   chatwoot_storage:
   caddy_data:
   caddy_config:

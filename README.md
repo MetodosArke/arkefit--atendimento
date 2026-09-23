@@ -4,16 +4,22 @@ Canal de suporte via WhatsApp para as academias clientes do ArkeFit. Sistema ind
 `arke-system`: não compartilha banco, código nem infraestrutura. A única ligação é o link do WhatsApp
 de suporte, que o ArkeFit mostra aos clientes (ver o fim deste arquivo).
 
-- **Evolution API** conecta um número de WhatsApp (pelo protocolo do WhatsApp Web, sem API oficial da Meta).
-- **Chatwoot** é onde a equipe lê e responde, e onde cada conversa é atribuída a quem vai atender.
-- **Caddy** publica os dois com HTTPS automático. **Postgres** e **Redis** guardam os dados.
+- **Chatwoot** recebe as mensagens pela API oficial da Meta (WhatsApp Cloud API) e é onde a equipe lê,
+  responde e distribui as conversas.
+- **Caddy** publica o Chatwoot com HTTPS automático. **Postgres** e **Redis** guardam os dados.
+
+O número usa **coexistência**: continua funcionando no aplicativo WhatsApp Business do celular e, ao mesmo
+tempo, na API. O Chatwoot suporta isso — não registra o número de novo (o que quebraria a coexistência) e
+mostra também as respostas dadas pelo celular. Pelo mesmo motivo, bibliotecas que imitam o WhatsApp Web
+(Evolution API, Baileys) **não funcionam** nesse número: a Meta tira da mensagem o que elas precisam para
+decifrá-la.
 
 ## O que providenciar
 
 | Item | Observação |
 |---|---|
 | Servidor Ubuntu 22.04/24.04 com pelo menos 4 GB de RAM | Gratuito na Oracle Cloud (ver abaixo). Portas 80 e 443 abertas. O IP não pode mudar: o endereço de acesso é derivado dele. |
-| Chip de WhatsApp dedicado ao suporte | Não use número pessoal: a conexão não é a API oficial e, em caso de bloqueio, perde-se o número. |
+| Acesso à conta Meta Business do número | Para gerar o token e ler os IDs (ver "Conectar o WhatsApp"). |
 | *(opcional)* E-mail para envio (SMTP) | Sem ele tudo funciona, só não saem e-mails do Chatwoot. Ver `.env.example`. |
 
 Não precisa comprar domínio: o `sslip.io` transforma o IP do servidor num endereço
@@ -69,24 +75,44 @@ tarde. Em 5 a 10 minutos após a criação, a instalação termina; o endereço 
 
 ## Conectar o WhatsApp
 
-1. No Chatwoot, avatar → **Configurações do perfil** → copie o **Token de acesso**.
-2. No servidor: `bash /opt/arkefit-atendimento/scripts/conectar-whatsapp.sh <token>`
-3. No Chatwoot aparece a caixa **WhatsApp Suporte** com uma conversa contendo o QR Code.
-   Escaneie no celular do número de suporte: **Aparelhos conectados → Conectar um aparelho**.
+**1. Na Meta**, reunir quatro dados:
 
-A partir daí toda mensagem recebida vira conversa no Chatwoot, e a resposta digitada lá sai pelo WhatsApp.
+| Dado | Onde |
+|---|---|
+| Número com DDI | ex.: `+5511999999999` |
+| ID do número de telefone | Gerenciador do WhatsApp → Números de telefone → o número; ou painel do app → WhatsApp → Configuração da API |
+| ID da conta do WhatsApp Business (WABA) | mesmo lugar |
+| Token permanente | Configurações do negócio → Usuários do sistema → Adicionar (função Administrador) → Atribuir ativos: a conta do WhatsApp (controle total) e o app → Gerar token: validade **Nunca**, permissões `whatsapp_business_messaging` e `whatsapp_business_management` |
+
+O token dá acesso à conta do WhatsApp inteira: trate como senha, e só cole no Chatwoot.
+
+**2. No Chatwoot**: Configurações → Caixas de entrada → Adicionar caixa de entrada → WhatsApp → provedor
+**WhatsApp Cloud**. Nome `WhatsApp Suporte` e os quatro dados acima (o token vai em "Chave de API").
+
+Ao salvar, o próprio Chatwoot aponta o webhook **deste número** para ele. Se hoje outro sistema recebe as
+mensagens desse número, ele para de receber. Se o apontamento automático falhar, a tela da caixa mostra a
+URL de callback e o token de verificação para colar à mão no painel do app → WhatsApp → Configuração → Webhook
+(assinando os campos `messages` e `smb_message_echoes`).
+
+**3. Testar**: mande uma mensagem de outro celular para o número. Ela aparece no Chatwoot e continua
+aparecendo no aplicativo do celular.
+
+**Janela de 24 horas.** Pela regra da Meta, a resposta livre só vale até 24 h depois da última mensagem do
+cliente, e dentro dela é gratuita. Depois disso só sai mensagem com modelo aprovado, que é cobrada. Num canal
+de suporte que só responde, isso quase não aparece; quando aparecer, o Chatwoot avisa na conversa.
 
 ## Distribuir o atendimento
 
 Em **Configurações → Caixas de entrada → WhatsApp Suporte → Colaboradores**, inclua os dois agentes e ligue
 **Atribuição automática**: as conversas novas se alternam entre vocês. Para mandar uma conversa específica para
-o outro, use o campo **Atribuído a** dentro dela.
+o outro, use o campo **Atribuído a** dentro dela. Responder pelo celular também funciona e fica registrado no
+Chatwoot, mas a atribuição só existe no Chatwoot.
 
 ## Backup
 
-O instalador agenda `scripts/backup.sh` todo dia às 03:00: os dois bancos e a sessão do WhatsApp, em
-`/var/backups/arkefit-atendimento`, mantendo os 7 mais recentes. A sessão entra porque, sem ela, é preciso
-escanear o QR Code de novo. O backup fica no próprio servidor — protege de erro e corrupção, não da perda
+O instalador agenda `scripts/backup.sh` todo dia às 03:00: o banco do Chatwoot e os anexos (fotos e
+documentos dos clientes ficam fora do banco), em `/var/backups/arkefit-atendimento`, mantendo os 7 mais
+recentes. O backup fica no próprio servidor — protege de erro e corrupção, não da perda
 do servidor; para isso, use snapshots do disco no provedor. O cabeçalho do script mostra como restaurar.
 
 ## Operação
@@ -94,7 +120,7 @@ do servidor; para isso, use snapshots do disco no provedor. O cabeçalho do scri
 ```bash
 cd /opt/arkefit-atendimento
 docker compose ps              # estado dos serviços
-docker compose logs -f <nome>  # logs (evolution-api, chatwoot-rails, …)
+docker compose logs -f <nome>  # logs (chatwoot-rails, chatwoot-sidekiq, caddy, …)
 git pull && docker compose pull && docker compose up -d   # atualizar
 ```
 

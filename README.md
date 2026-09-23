@@ -1,69 +1,76 @@
 # ArkeFit Atendimento
 
-Plataforma de atendimento via WhatsApp para clientes que já adquiriram o ArkeFit.
-Sistema independente do `arke-system` — sem correlação de banco, código ou infraestrutura.
+Canal de suporte via WhatsApp para as academias clientes do ArkeFit. Sistema independente do
+`arke-system`: não compartilha banco, código nem infraestrutura. A única ligação é o link do WhatsApp
+de suporte, que o ArkeFit mostra aos clientes (ver o fim deste arquivo).
 
-Stack: **Evolution API** (conecta o número de WhatsApp, somente recebimento/envio de conversa)
-+ **Chatwoot** (inbox onde você e seu sócio atendem e distribuem as conversas entre si).
+- **Evolution API** conecta um número de WhatsApp (pelo protocolo do WhatsApp Web, sem API oficial da Meta).
+- **Chatwoot** é onde a equipe lê e responde, e onde cada conversa é atribuída a quem vai atender.
+- **Caddy** publica os dois com HTTPS automático. **Postgres** e **Redis** guardam os dados.
 
-## O que você precisa providenciar
+## O que providenciar
 
-### 1. VPS
-Provisione um servidor (Hetzner, DigitalOcean, Contabo etc.) com:
-- Ubuntu 22.04 (ou similar)
-- Docker + Docker Compose instalados (`curl -fsSL https://get.docker.com | sh`)
-- Portas 80 e 443 liberadas no firewall
-- Pelo menos 2 vCPU / 4 GB RAM (Chatwoot é o mais pesado dos dois)
+| Item | Onde | Observação |
+|---|---|---|
+| VPS Ubuntu 22.04 ou 24.04, 2 vCPU / 4 GB RAM | Hetzner, DigitalOcean, Contabo… | Portas 80 e 443 abertas. Anote o IP e a senha de root. |
+| Chip de WhatsApp dedicado ao suporte | Qualquer operadora | Não use número pessoal: a conexão não é a API oficial e, em caso de bloqueio, perde-se o número. |
+| E-mail para envio (SMTP) | Conta Gmail dedicada | Ative a verificação em duas etapas e gere uma [senha de app](https://myaccount.google.com/apppasswords). |
 
-Anote o **IP público** do servidor — vai ser usado no domínio gratuito (passo 2).
+Não precisa comprar domínio: o `sslip.io` transforma o IP do servidor num endereço
+(`chatwoot.203-0-113-10.sslip.io`), e o script monta isso sozinho. As senhas internas
+(Postgres, Redis, chaves) também são geradas pelo script e ficam só no `.env` do servidor.
 
-### 2. Domínio (gratuito, via sslip.io)
-Não precisa comprar nada. O `sslip.io` resolve automaticamente qualquer nome no formato
-`algo.SEU-IP-COM-HIFEN.sslip.io` para o IP embutido no próprio nome.
+## Instalar
 
-Exemplo: se o IP do VPS for `203.0.113.10`, use:
-- `chatwoot.203-0-113-10.sslip.io`
-- `evolution.203-0-113-10.sslip.io`
-
-Preencha isso em `CHATWOOT_DOMAIN` e `EVOLUTION_DOMAIN` no `.env`.
-
-### 3. Segredos e senhas (gerados por você, localmente)
-Rode estes comandos no terminal e cole cada resultado no `.env`:
+No servidor, como root:
 
 ```bash
-openssl rand -hex 24   # -> POSTGRES_PASSWORD
-openssl rand -hex 24   # -> REDIS_PASSWORD
-openssl rand -hex 64   # -> CHATWOOT_SECRET_KEY_BASE
-openssl rand -hex 32   # -> EVOLUTION_API_KEY
+git clone https://github.com/MetodosArke/arkefit--atendimento.git
+cd arkefit--atendimento
+bash scripts/instalar.sh     # gera o .env e para, pedindo o SMTP
+nano .env                    # preencha LETSENCRYPT_EMAIL e o bloco SMTP
+bash scripts/instalar.sh     # agora sobe tudo
 ```
 
-### 4. E-mail SMTP (para o Chatwoot mandar convite/redefinição de senha)
-Use uma conta de e-mail dedicada. Caminho mais rápido com Gmail:
-1. Crie (ou use) uma conta Gmail só para isso.
-2. Ative a verificação em duas etapas na conta Google.
-3. Gere uma "Senha de app" em https://myaccount.google.com/apppasswords
-4. Preencha `SMTP_USERNAME` (o e-mail) e `SMTP_PASSWORD` (a senha de app gerada) no `.env`.
-
-## Como subir o sistema
-
-```bash
-# 1. Clonar e entrar na pasta (já feito se você está lendo isso no repo)
-cp .env.example .env
-nano .env   # preencha com os valores dos passos acima
-
-# 2. Subir os containers
-docker compose up -d
-
-# 3. Acompanhar os logs até tudo ficar saudável
-docker compose logs -f
-```
+A primeira subida baixa as imagens e cria o banco — alguns minutos. `docker compose logs -f` mostra o andamento.
 
 ## Primeiro acesso
 
-1. Abra `https://SEU_CHATWOOT_DOMAIN` — a primeira tela pede para criar a conta admin (seu usuário).
-2. Dentro do Chatwoot, crie um segundo agente para o seu sócio (Configurações → Agentes → Adicionar agente).
-3. Abra `https://SEU_EVOLUTION_DOMAIN` (ou use a API) com o header `apikey: SEU_EVOLUTION_API_KEY` para criar uma instância e obter o QR Code — escaneie com o WhatsApp que vai ser o número de atendimento (recomendo um chip dedicado, não o pessoal).
-4. No Chatwoot, crie um canal do tipo "API" e conecte com a instância da Evolution API (webhook da Evolution API aponta para a URL do canal no Chatwoot). Isso liga as duas pontas: mensagem chega no WhatsApp → aparece na inbox do Chatwoot → você ou seu sócio assume a conversa.
+1. Abra o endereço que o script mostrou e crie a conta de administrador.
+2. **Configurações → Agentes → Adicionar agente**: convide seu sócio. Ele recebe o convite por e-mail.
 
-## Próximos passos (fora do escopo desta primeira etapa)
-- Chatbot de IA para dúvidas simples (usando a conta OpenAI que você já possui) — entra depois que o fluxo manual estiver validado.
+## Conectar o WhatsApp
+
+1. No Chatwoot, avatar → **Configurações do perfil** → copie o **Token de acesso**.
+2. No servidor: `bash scripts/conectar-whatsapp.sh <token>`
+3. No Chatwoot aparece a caixa **WhatsApp Suporte** com uma conversa contendo o QR Code.
+   Escaneie no celular do número de suporte: **Aparelhos conectados → Conectar um aparelho**.
+
+A partir daí toda mensagem recebida vira conversa no Chatwoot, e a resposta digitada lá sai pelo WhatsApp.
+
+## Distribuir o atendimento
+
+Em **Configurações → Caixas de entrada → WhatsApp Suporte → Colaboradores**, inclua os dois agentes e ligue
+**Atribuição automática**: as conversas novas se alternam entre vocês. Para mandar uma conversa específica para
+o outro, use o campo **Atribuído a** dentro dela.
+
+## Operação
+
+```bash
+docker compose ps              # estado dos serviços
+docker compose logs -f <nome>  # logs (evolution-api, chatwoot-rails, …)
+git pull && docker compose pull && docker compose up -d   # atualizar
+```
+
+O `chatwoot-prepare` roda a cada subida e aplica as migrations de uma versão nova; ele aparece como
+"Exited (0)" — é o esperado.
+
+## Ligação com o ArkeFit
+
+Quando o número estiver conectado, cadastre o link `https://wa.me/55DDDNUMERO` como canal de suporte em
+**ArkeFit → Visão Master → Configurações**. É ele que alimenta o botão "falar com o suporte" do onboarding
+das academias.
+
+## Próximo passo
+
+Chatbot para dúvidas simples (conta OpenAI já existente), respondendo antes de passar para uma pessoa.

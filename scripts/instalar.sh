@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Instala e sobe a plataforma num VPS Ubuntu recém-criado. Rodar como root, na pasta do repositório:
+# Instala e sobe a plataforma num servidor Ubuntu. Rodar como root, na pasta do repositório:
 #   bash scripts/instalar.sh
-# É seguro rodar de novo: não sobrescreve um .env existente nem as senhas já geradas.
+# Não pede nada: gera domínios e senhas sozinho. É seguro rodar de novo — não sobrescreve
+# um .env existente, então as senhas e o endereço continuam os mesmos.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -27,17 +28,14 @@ if [ ! -f .env ]; then
   chmod 600 .env
 fi
 
-# Sem SMTP o Chatwoot sobe, mas não manda convite nem redefinição de senha.
-if grep -qE '^(SMTP_PASSWORD=SENHA_DE_APP_AQUI|LETSENCRYPT_EMAIL=seu-email@exemplo.com)' .env; then
-  echo
-  echo "Falta preencher no .env: LETSENCRYPT_EMAIL e o bloco SMTP (MAILER_SENDER_EMAIL, SMTP_USERNAME, SMTP_PASSWORD)."
-  echo "Edite com:  nano .env   e rode este script de novo."
-  exit 1
-fi
-
 if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
   ufw allow 80/tcp && ufw allow 443/tcp
 fi
+
+# Backup diário às 03:00 do servidor, guardando os últimos 7.
+chmod +x scripts/backup.sh
+linha_cron="0 3 * * * root $(pwd)/scripts/backup.sh >> /var/log/arkefit-backup.log 2>&1"
+echo "$linha_cron" > /etc/cron.d/arkefit-backup
 
 echo "→ Subindo os serviços (a primeira vez baixa as imagens e prepara o banco; leva alguns minutos)"
 docker compose pull
@@ -46,4 +44,7 @@ docker compose up -d
 . ./.env
 echo
 echo "Pronto. Abra https://$CHATWOOT_DOMAIN e crie a conta de administrador."
-echo "Depois siga o passo \"Conectar o WhatsApp\" do README."
+if [ -z "${SMTP_ADDRESS:-}" ]; then
+  echo "Aviso: SMTP não configurado — o Chatwoot funciona, mas não envia e-mail (convite, redefinição de senha)."
+  echo "Para ligar depois: preencha o bloco SMTP no .env e rode  docker compose up -d"
+fi

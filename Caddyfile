@@ -1,7 +1,3 @@
-{
-	email {$LETSENCRYPT_EMAIL}
-}
-
 {$CHATWOOT_DOMAIN} {
 	reverse_proxy chatwoot-rails:3000
 }

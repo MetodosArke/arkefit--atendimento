@@ -32,6 +32,15 @@ if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
   ufw allow 80/tcp && ufw allow 443/tcp
 fi
 
+# O Ubuntu da Oracle Cloud vem com regras de iptables que recusam tudo além do SSH.
+if command -v netfilter-persistent >/dev/null 2>&1; then
+  for porta in 80 443; do
+    iptables -C INPUT -p tcp --dport "$porta" -j ACCEPT 2>/dev/null \
+      || iptables -I INPUT -p tcp --dport "$porta" -j ACCEPT
+  done
+  netfilter-persistent save
+fi
+
 # Backup diário às 03:00 do servidor, guardando os últimos 7.
 chmod +x scripts/backup.sh
 linha_cron="0 3 * * * root $(pwd)/scripts/backup.sh >> /var/log/arkefit-backup.log 2>&1"

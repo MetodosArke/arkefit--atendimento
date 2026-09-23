@@ -12,7 +12,7 @@ de suporte, que o ArkeFit mostra aos clientes (ver o fim deste arquivo).
 
 | Item | Observação |
 |---|---|
-| Servidor Ubuntu 22.04/24.04, 2 vCPU / 4 GB RAM, IP fixo | Portas 80 e 443 abertas. Menos de 4 GB não sustenta o Chatwoot. O IP precisa ser fixo: o endereço de acesso é derivado dele. |
+| Servidor Ubuntu 22.04/24.04 com pelo menos 4 GB de RAM | Gratuito na Oracle Cloud (ver abaixo). Portas 80 e 443 abertas. O IP não pode mudar: o endereço de acesso é derivado dele. |
 | Chip de WhatsApp dedicado ao suporte | Não use número pessoal: a conexão não é a API oficial e, em caso de bloqueio, perde-se o número. |
 | *(opcional)* E-mail para envio (SMTP) | Sem ele tudo funciona, só não saem e-mails do Chatwoot. Ver `.env.example`. |
 
@@ -32,20 +32,34 @@ bash /opt/arkefit-atendimento/scripts/instalar.sh
 Não pede nada. A primeira subida baixa as imagens e cria o banco — alguns minutos;
 `docker compose logs -f` mostra o andamento. No fim, o script mostra o endereço do Chatwoot.
 
-### No Google Compute Engine
+### Na Oracle Cloud (camada gratuita)
 
-O `scripts/gce-startup.sh` faz a instalação acima sozinho no primeiro boot da VM. Configuração usada:
+A camada *Always Free* da Oracle roda a plataforma sem custo, em processador ARM — todas as imagens usadas
+têm versão ARM. O `scripts/boot-inicial.sh`, colado como script de inicialização, faz a instalação acima
+sozinho no primeiro boot.
+
+1. **Criar a conta** em oracle.com/cloud/free. A **região inicial é definitiva** e a instância gratuita só
+   existe nela: escolha **Brazil East (São Paulo)**. O cadastro pede cartão, só para verificação.
+2. **Liberar as portas** — Rede → Redes virtuais (VCN) → a VCN padrão → Lista de segurança padrão →
+   Adicionar regras de entrada: origem `0.0.0.0/0`, TCP, portas de destino `80` e depois `443`.
+3. **Criar a instância** — Computação → Instâncias → Criar:
 
 | Campo | Valor |
 |---|---|
-| Região | `southamerica-east1` (São Paulo) |
-| Máquina | `e2-medium` (2 vCPU, 4 GB) |
-| Disco | Ubuntu 24.04 LTS, 30 GB balanceado |
-| IP externo | **estático reservado** — IP efêmero muda ao parar a VM e o endereço de acesso muda junto |
-| Rede | tags `http-server` e `https-server` (liberam 80 e 443) |
-| Metadado `startup-script` | conteúdo de `scripts/gce-startup.sh` |
+| Imagem | Canonical Ubuntu 24.04 (a versão aarch64 aparece ao escolher a forma abaixo) |
+| Forma | Ampere → `VM.Standard.A1.Flex`, **1 OCPU e 6 GB** |
+| Rede | VCN padrão, sub-rede pública, com endereço IPv4 público |
+| Chave SSH | "Gerar par de chaves" e **baixar a chave privada** — é o único acesso ao servidor |
+| Script de inicialização | Mostrar opções avançadas → Gerenciamento → colar o conteúdo de `scripts/boot-inicial.sh` |
 
-O log da instalação fica em `/var/log/arkefit-instalacao.log`.
+**Por que 1 OCPU e 6 GB, e não o máximo gratuito:** a Oracle recolhe instância gratuita que fica 7 dias com
+CPU, rede **e** memória abaixo de 20%. Com 6 GB, a plataforma ocupa em torno de metade da memória e fica longe
+desse limite; com 12 GB, fica perto dele. Converter a conta para *Pay As You Go* elimina o recolhimento e
+continua sem custo dentro dos limites gratuitos.
+
+Se aparecer **"Out of capacity"**, é falta de máquina ARM livre na região naquele momento: tente de novo mais
+tarde. Em 5 a 10 minutos após a criação, a instalação termina; o endereço do Chatwoot é
+`https://chatwoot.<IP-com-hífens>.sslip.io`, e o log fica em `/var/log/arkefit-instalacao.log`.
 
 ## Primeiro acesso
 

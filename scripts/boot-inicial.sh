@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Script de inicialização da VM no Google Compute Engine (metadado "startup-script").
+# Instalação automática no primeiro boot de um servidor novo. Cole o conteúdo como script de
+# inicialização ao criar a instância (Oracle: "Script cloud-init"; outros provedores: "user data").
 # Roda a cada boot, mas só instala no primeiro: depois disso os containers voltam sozinhos
 # (restart: unless-stopped), e reinstalar a cada boot atualizaria as imagens sem ninguém pedir.
 set -euo pipefail
